@@ -23,7 +23,6 @@ let allBookings = [];
 let selectedDate = '';
 let selectedTime = '';
 let isAdmin = false;
-let expandedDate = null;
 
 // ========== Utility Functions ==========
 function formatDate(date) {
@@ -146,7 +145,6 @@ function renderCalendar() {
         const isTodayDate = dateStr === formatDate(today);
         const isInRange = date >= startDate && date <= endDate;
         const status = isInRange ? getDayStatus(dateStr) : 'out-of-range';
-        const isExpanded = expandedDate === dateStr;
 
         const card = document.createElement('div');
 
@@ -158,14 +156,14 @@ function renderCalendar() {
             continue;
         }
 
-        card.className = `day-card${isTodayDate ? ' today' : ''}${isExpanded ? ' expanded' : ''}`;
+        card.className = `day-card${isTodayDate ? ' today' : ''}`;
 
         // Status bar
         const statusBar = document.createElement('div');
         statusBar.className = `day-card-status ${status}`;
         card.appendChild(statusBar);
 
-        // Header (clickable to expand/collapse)
+        // Header (clickable to open modal)
         const header = document.createElement('div');
         header.className = 'day-card-header';
 
@@ -178,64 +176,60 @@ function renderCalendar() {
             </span>
         `;
 
-        if (!isExpanded) {
-            header.onclick = () => toggleDay(dateStr);
-        }
+        // Click to open detail modal
+        header.onclick = () => openDateDetailModal(dateStr, date);
 
         card.appendChild(header);
-
-        // Expanded detail panel
-        const detail = document.createElement('div');
-        detail.className = 'day-card-detail';
-
-        const displayDate = `${date.getMonth() + 1}月${dayNum}日`;
-        detail.innerHTML = `<div class="day-card-detail-title">${displayDate} · 时段详情</div>`;
-
-        const slotsGrid = document.createElement('div');
-        slotsGrid.className = 'day-slots-grid';
-
-        TIME_SLOTS.forEach(slot => {
-            const booking = getBookingForSlot(dateStr, slot.key);
-            const isOccupied = !!booking;
-            const el = document.createElement('div');
-            el.className = `time-slot${isOccupied ? ' occupied' : ''}`;
-
-            if (isOccupied) {
-                el.innerHTML = `
-                    <div class="time-slot-icon">${slot.icon}</div>
-                    <div class="time-slot-label">${slot.label}</div>
-                    <div class="time-slot-status">已预约</div>
-                    <div class="occupied-info">${escapeHtml(booking.name)}</div>
-                `;
-            } else {
-                el.innerHTML = `
-                    <div class="time-slot-icon">${slot.icon}</div>
-                    <div class="time-slot-label">${slot.label}</div>
-                    <div class="time-slot-status">可预约</div>
-                    <div class="time-slot-time">${slot.time}</div>
-                `;
-                el.onclick = () => openBookModal(dateStr, slot);
-            }
-
-            slotsGrid.appendChild(el);
-        });
-
-        detail.appendChild(slotsGrid);
-
-        // Close button for expanded view
-        const closeBtn = document.createElement('div');
-        closeBtn.style.cssText = 'text-align:center; margin-top:12px;';
-        closeBtn.innerHTML = `<button class="btn btn-secondary" style="flex:none; padding:6px 16px; font-size:12px;" onclick="toggleDay(null)">收起</button>`;
-        detail.appendChild(closeBtn);
-
-        card.appendChild(detail);
         grid.appendChild(card);
     }
 }
 
-function toggleDay(dateStr) {
-    expandedDate = (expandedDate === dateStr) ? null : dateStr;
-    renderCalendar();
+// ========== Date Detail Modal ==========
+function openDateDetailModal(dateStr, dateObj) {
+    const dayNum = dateObj.getDate();
+    const month = dateObj.getMonth() + 1;
+    const weekday = WEEKDAYS[dateObj.getDay()];
+
+    document.getElementById('dateDetailTitle').textContent = `${month}月${dayNum}日`;
+    document.getElementById('dateDetailSubtitle').textContent = `周${weekday}`;
+
+    const slotsContainer = document.getElementById('dateDetailSlots');
+    slotsContainer.innerHTML = '';
+
+    TIME_SLOTS.forEach(slot => {
+        const booking = getBookingForSlot(dateStr, slot.key);
+        const isOccupied = !!booking;
+        const el = document.createElement('div');
+        el.className = `time-slot${isOccupied ? ' occupied' : ''}`;
+
+        if (isOccupied) {
+            el.innerHTML = `
+                <div class="time-slot-icon">${slot.icon}</div>
+                <div class="time-slot-label">${slot.label}</div>
+                <div class="time-slot-status">已预约</div>
+                <div class="occupied-info">${escapeHtml(booking.name)}</div>
+            `;
+        } else {
+            el.innerHTML = `
+                <div class="time-slot-icon">${slot.icon}</div>
+                <div class="time-slot-label">${slot.label}</div>
+                <div class="time-slot-status">可预约</div>
+                <div class="time-slot-time">${slot.time}</div>
+            `;
+            el.onclick = () => {
+                closeDateDetailModal();
+                openBookModal(dateStr, slot);
+            };
+        }
+
+        slotsContainer.appendChild(el);
+    });
+
+    document.getElementById('dateDetailModal').classList.add('active');
+}
+
+function closeDateDetailModal() {
+    document.getElementById('dateDetailModal').classList.remove('active');
 }
 
 // ========== Booking Modal ==========
@@ -584,6 +578,7 @@ document.addEventListener('keydown', (e) => {
         closeBookModal();
         closeLoginModal();
         closeConfirm();
+        closeDateDetailModal();
     }
     if (e.key === 'Enter') {
         const bookModal = document.getElementById('bookModal');

@@ -86,9 +86,32 @@ function getDayStatus(dateStr) {
     return 'partial';
 }
 
+// 渲染星期标题行
+function renderWeekdayHeaders() {
+    const existing = document.querySelector('.weekday-header-row');
+    if (existing) existing.remove();
+
+    const headerRow = document.createElement('div');
+    headerRow.className = 'weekday-header-row';
+
+    const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    weekdays.forEach(day => {
+        const el = document.createElement('div');
+        el.className = 'weekday-header';
+        el.textContent = day;
+        headerRow.appendChild(el);
+    });
+
+    const grid = document.getElementById('calendarGrid');
+    grid.parentNode.insertBefore(headerRow, grid);
+}
+
 function renderCalendar() {
     const grid = document.getElementById('calendarGrid');
     grid.innerHTML = '';
+
+    // 渲染星期标题
+    renderWeekdayHeaders();
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -97,22 +120,44 @@ function renderCalendar() {
     const endDate = new Date(today);
     endDate.setDate(endDate.getDate() + CONFIG.DAYS_AHEAD - 1);
 
+    // 计算需要显示的起始日期（对齐到周日）
+    const firstDayWeekday = startDate.getDay(); // 0=周日, 1=周一...
+    const calendarStart = new Date(startDate);
+    calendarStart.setDate(calendarStart.getDate() - firstDayWeekday);
+
+    // 计算结束日期（对齐到周六，确保完整的周）
+    const lastDayWeekday = endDate.getDay();
+    const calendarEnd = new Date(endDate);
+    calendarEnd.setDate(calendarEnd.getDate() + (6 - lastDayWeekday));
+
+    // 计算总天数
+    const totalDays = Math.ceil((calendarEnd - calendarStart) / (1000 * 60 * 60 * 24)) + 1;
+
     document.getElementById('monthLabel').textContent =
         `${startDate.getFullYear()}年${MONTHS[startDate.getMonth()]}`;
     document.getElementById('monthRange').textContent =
         `${startDate.getMonth() + 1}月${startDate.getDate()}日 — ${endDate.getMonth() + 1}月${endDate.getDate()}日`;
 
-    for (let i = 0; i < CONFIG.DAYS_AHEAD; i++) {
-        const date = new Date(today);
+    for (let i = 0; i < totalDays; i++) {
+        const date = new Date(calendarStart);
         date.setDate(date.getDate() + i);
         const dateStr = formatDate(date);
-        const weekday = WEEKDAYS[date.getDay()];
         const dayNum = date.getDate();
-        const isTodayDate = i === 0;
-        const status = getDayStatus(dateStr);
+        const isTodayDate = dateStr === formatDate(today);
+        const isInRange = date >= startDate && date <= endDate;
+        const status = isInRange ? getDayStatus(dateStr) : 'out-of-range';
         const isExpanded = expandedDate === dateStr;
 
         const card = document.createElement('div');
+
+        if (!isInRange) {
+            // 范围外的空白占位
+            card.className = 'day-card empty';
+            card.style.visibility = 'hidden';
+            grid.appendChild(card);
+            continue;
+        }
+
         card.className = `day-card${isTodayDate ? ' today' : ''}${isExpanded ? ' expanded' : ''}`;
 
         // Status bar
@@ -127,12 +172,9 @@ function renderCalendar() {
         const bookedCount = TIME_SLOTS.filter(s => getBookingForSlot(dateStr, s.key)).length;
 
         header.innerHTML = `
-            <div class="day-card-left">
-                <span class="day-card-number">${dayNum}</span>
-                <span class="day-card-weekday">周${weekday}</span>
-            </div>
+            <span class="day-card-number">${dayNum}</span>
             <span class="day-card-badge ${status === 'all-free' ? 'free' : status === 'full' ? 'full' : 'partial'}">
-                ${status === 'all-free' ? '可预约' : status === 'full' ? '已满' : `${bookedCount}/${TIME_SLOTS.length} 已约`}
+                ${bookedCount}/${TIME_SLOTS.length}
             </span>
         `;
 
@@ -146,7 +188,7 @@ function renderCalendar() {
         const detail = document.createElement('div');
         detail.className = 'day-card-detail';
 
-        const displayDate = `${date.getMonth() + 1}月${dayNum}日 周${weekday}`;
+        const displayDate = `${date.getMonth() + 1}月${dayNum}日`;
         detail.innerHTML = `<div class="day-card-detail-title">${displayDate} · 时段详情</div>`;
 
         const slotsGrid = document.createElement('div');
@@ -365,34 +407,66 @@ function renderAdminList() {
         return;
     }
 
-    const sorted = [...allBookings].sort((a, b) => {
-        if (a.date !== b.date) return b.date.localeCompare(a.date);
-        const order = { lunch: 0, afternoon: 1, dinner: 2, night: 3 };
-        return (order[a.time] || 0) - (order[b.time] || 0);
+    // 按日期分组
+    const grouped = {};
+    allBookings.forEach(booking => {
+        if (!grouped[booking.date]) grouped[booking.date] = [];
+        grouped[booking.date].push(booking);
     });
 
-    list.innerHTML = sorted.map(booking => {
-        const slot = TIME_SLOTS.find(s => s.key === booking.time) || TIME_SLOTS[0];
-        const parts = booking.date.split('-');
-        const day = parseInt(parts[2]);
-        const monthLabel = `${parseInt(parts[1])}月`;
+    // 日期降序排列
+    const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
 
-        return `
-            <div class="admin-item">
-                <div class="admin-item-date">
-                    <div class="admin-item-day">${day}</div>
-                    <div class="admin-item-month">${monthLabel}</div>
+    const today = formatDate(new Date());
+
+    list.innerHTML = sortedDates.map(dateStr => {
+        const bookings = grouped[dateStr];
+        // 按时段顺序排序
+        const order = { lunch: 0, afternoon: 1, dinner: 2, night: 3 };
+        bookings.sort((a, b) => (order[a.time] || 0) - (order[b.time] || 0));
+
+        const date = new Date(dateStr);
+        const day = date.getDate();
+        const month = date.getMonth() + 1;
+        const weekday = WEEKDAYS[date.getDay()];
+        const isToday = dateStr === today;
+
+        const dateHeader = `
+            <div class="admin-date-header">
+                <div class="admin-date-left">
+                    <span class="admin-date-day">${day}</span>
+                    <span class="admin-date-month">${month}月</span>
+                    <span class="admin-date-weekday">周${weekday}</span>
+                    ${isToday ? '<span class="admin-date-today">今天</span>' : ''}
                 </div>
-                <div class="admin-item-info">
-                    <div class="admin-item-name">${escapeHtml(booking.name)}</div>
-                    <div class="admin-item-detail">
-                        ${slot.icon} ${slot.label}（${slot.time}）· 📞 ${escapeHtml(booking.phone)}
+                <span class="admin-date-count">${bookings.length} 个预约</span>
+            </div>
+        `;
+
+        const bookingItems = bookings.map(booking => {
+            const slot = TIME_SLOTS.find(s => s.key === booking.time) || TIME_SLOTS[0];
+            return `
+                <div class="admin-item">
+                    <div class="admin-item-info">
+                        <div class="admin-item-name">${escapeHtml(booking.name)}</div>
+                        <div class="admin-item-detail">
+                            ${slot.icon} ${slot.label}（${slot.time}）· 📞 ${escapeHtml(booking.phone)}
+                        </div>
+                    </div>
+                    <div class="admin-item-actions">
+                        <button class="delete-btn" onclick="requestDelete(${booking.id}, '${escapeHtml(booking.name)}', '${booking.date}', '${slot.label}')">
+                            删除
+                        </button>
                     </div>
                 </div>
-                <div class="admin-item-actions">
-                    <button class="delete-btn" onclick="requestDelete(${booking.id}, '${escapeHtml(booking.name)}', '${booking.date}', '${slot.label}')">
-                        删除
-                    </button>
+            `;
+        }).join('');
+
+        return `
+            <div class="admin-date-group">
+                ${dateHeader}
+                <div class="admin-date-bookings">
+                    ${bookingItems}
                 </div>
             </div>
         `;
@@ -427,9 +501,57 @@ async function deleteBooking(id) {
     }
 }
 
+// ========== Auto Cleanup ==========
+async function cleanupExpiredBookings() {
+    try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // 计算3天前的日期
+        const cutoffDate = new Date(today);
+        cutoffDate.setDate(cutoffDate.getDate() - 3);
+        const cutoffStr = formatDate(cutoffDate);
+
+        // 查询所有过期3天以上的预约
+        const res = await fetch(
+            apiUrl(`?date=lt.${cutoffStr}&select=id`),
+            { headers: supabaseHeaders() }
+        );
+
+        if (res.ok) {
+            const expiredBookings = await res.json();
+
+            if (expiredBookings.length > 0) {
+                console.log(`发现 ${expiredBookings.length} 条过期预约，正在清理...`);
+
+                // 批量删除过期预约
+                const deletePromises = expiredBookings.map(booking =>
+                    fetch(apiUrl(`?id=eq.${booking.id}`), {
+                        method: 'DELETE',
+                        headers: supabaseHeaders()
+                    })
+                );
+
+                await Promise.all(deletePromises);
+                console.log(`已清理 ${expiredBookings.length} 条过期预约`);
+
+                // 显示清理提示（仅在管理后台或控制台显示）
+                if (expiredBookings.length > 0) {
+                    showToast(`已自动清理 ${expiredBookings.length} 条过期预约`, 'success');
+                }
+            }
+        }
+    } catch (e) {
+        console.error('清理过期预约失败:', e);
+    }
+}
+
 // ========== Data Loading ==========
 async function loadBookings() {
     try {
+        // 先清理过期预约
+        await cleanupExpiredBookings();
+
         const today = formatDate(new Date());
         const futureDate = new Date();
         futureDate.setDate(futureDate.getDate() + CONFIG.DAYS_AHEAD);

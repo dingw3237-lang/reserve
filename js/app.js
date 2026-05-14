@@ -42,8 +42,8 @@ function getBookingForSlot(dateStr, timeKey) {
     return allBookings.find(b => b.date === dateStr && b.time === timeKey);
 }
 
-function validatePhone(phone) {
-    return /^1[3-9]\d{9}$/.test(phone);
+function validateReason(reason) {
+    return reason.trim().length > 0;
 }
 
 // ========== Toast Notifications ==========
@@ -207,7 +207,7 @@ function openDateDetailModal(dateStr, dateObj) {
                 <div class="time-slot-icon">${slot.icon}</div>
                 <div class="time-slot-label">${slot.label}</div>
                 <div class="time-slot-status">已预约</div>
-                <div class="occupied-info">${escapeHtml(booking.name)}</div>
+                <div class="occupied-info">${escapeHtml(booking.reason || booking.name)}</div>
             `;
         } else {
             el.innerHTML = `
@@ -244,11 +244,11 @@ function openBookModal(dateStr, slot) {
         `${displayDate} · ${slot.label}（${slot.time}）`;
 
     document.getElementById('bookName').value = '';
-    document.getElementById('bookPhone').value = '';
+    document.getElementById('bookReason').value = '';
     document.getElementById('bookName').classList.remove('error');
-    document.getElementById('bookPhone').classList.remove('error');
+    document.getElementById('bookReason').classList.remove('error');
     document.getElementById('nameError').classList.remove('visible');
-    document.getElementById('phoneError').classList.remove('visible');
+    document.getElementById('reasonError').classList.remove('visible');
 
     document.getElementById('bookModal').classList.add('active');
     setTimeout(() => document.getElementById('bookName').focus(), 250);
@@ -260,9 +260,9 @@ function closeBookModal() {
 
 async function submitBooking() {
     const nameInput = document.getElementById('bookName');
-    const phoneInput = document.getElementById('bookPhone');
+    const reasonInput = document.getElementById('bookReason');
     const name = nameInput.value.trim();
-    const phone = phoneInput.value.trim();
+    const reason = reasonInput.value.trim();
 
     let valid = true;
 
@@ -275,13 +275,13 @@ async function submitBooking() {
         document.getElementById('nameError').classList.remove('visible');
     }
 
-    if (!validatePhone(phone)) {
-        phoneInput.classList.add('error');
-        document.getElementById('phoneError').classList.add('visible');
+    if (!validateReason(reason)) {
+        reasonInput.classList.add('error');
+        document.getElementById('reasonError').classList.add('visible');
         valid = false;
     } else {
-        phoneInput.classList.remove('error');
-        document.getElementById('phoneError').classList.remove('visible');
+        reasonInput.classList.remove('error');
+        document.getElementById('reasonError').classList.remove('visible');
     }
 
     if (!valid) return;
@@ -298,7 +298,7 @@ async function submitBooking() {
                 date: selectedDate,
                 time: selectedTime,
                 name: name,
-                phone: phone
+                reason: reason
             })
         });
 
@@ -439,12 +439,14 @@ function renderAdminList() {
 
         const bookingItems = bookings.map(booking => {
             const slot = TIME_SLOTS.find(s => s.key === booking.time) || TIME_SLOTS[0];
+            const displayTitle = escapeHtml(booking.reason || booking.name);
+            const displaySub = booking.reason ? escapeHtml(booking.name) : '';
             return `
                 <div class="admin-item">
                     <div class="admin-item-info">
-                        <div class="admin-item-name">${escapeHtml(booking.name)}</div>
+                        <div class="admin-item-name">${displayTitle}</div>
                         <div class="admin-item-detail">
-                            ${slot.icon} ${slot.label}（${slot.time}）· 📞 ${escapeHtml(booking.phone)}
+                            ${slot.icon} ${slot.label}（${slot.time}）${displaySub ? '· ' + displaySub : ''}
                         </div>
                     </div>
                     <div class="admin-item-actions">
@@ -564,7 +566,7 @@ async function loadBookings() {
                 date: item.date,
                 time: item.time,
                 name: item.name,
-                phone: item.phone
+                reason: item.reason
             }));
         }
     } catch (e) {

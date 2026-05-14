@@ -32,6 +32,11 @@ function formatDate(date) {
     return `${y}-${m}-${d}`;
 }
 
+function normalizeDate(dateStr) {
+    if (!dateStr) return '';
+    return dateStr.split('T')[0];
+}
+
 function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
@@ -555,19 +560,23 @@ async function loadBookings() {
 
         // 只查询未来 DAYS_AHEAD 天内的预约
         const res = await fetch(
-            apiUrl(`?date=gte.${today}&date=lte.${futureStr}&select=id,date,time,name,phone&order=date.asc`),
+            apiUrl(`?date=gte.${today}&date=lte.${futureStr}&select=id,date,time,name,reason&order=date.asc`),
             { headers: supabaseHeaders() }
         );
 
         if (res.ok) {
             const data = await res.json();
+            console.log('加载到的预约数据:', data);
             allBookings = data.map(item => ({
                 id: item.id,
-                date: item.date,
+                date: normalizeDate(item.date),
                 time: item.time,
                 name: item.name,
                 reason: item.reason
             }));
+            console.log('处理后的预约数据:', allBookings);
+        } else {
+            console.error('加载预约失败，状态码:', res.status);
         }
     } catch (e) {
         console.error('Failed to load bookings:', e);

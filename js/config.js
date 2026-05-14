@@ -5,8 +5,8 @@
 
 const CONFIG = {
     // Supabase 后端凭证
-    SUPABASE_URL: 'https://umciusmfajnkkmsbvepy.supabase.co',
-    SUPABASE_ANON_KEY: 'sb_publishable_bpL7qUdRgtBH38jPUo0q0Q_I-wUNKne',
+    SUPABASE_URL: 'https://eggnjxwfnunmqlgnpcwi.supabase.co',
+    SUPABASE_ANON_KEY: 'sb_publishable_s9rxD_g9f9aJ-Oezl0nRIQ_iEvBrAp4',
     TABLE: 'bookings',
 
     // 管理员密码
